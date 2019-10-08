@@ -1,9 +1,75 @@
-function getOrderItem() {
+function getOrderItem(orderItem, opportunityComponents, offerComponents, seller, taxPayeeRelationship, data) {
   //Output errors:
   // - SellerMismatchError: Opportunity not available under Seller associated with specified auth key
   // - OpportunityNotFoundError: Opportunity not found
 
 
+
+  return {
+    "type": "OrderItem",
+    "orderItemStatus": "https://openactive.io/OrderConfirmed",
+    "allowCustomerCancellationFullRefund": true,
+    "unitTaxSpecification": [
+      {
+        "type": "TaxChargeSpecification",
+        "name": "VAT at 0% for EU transactions",
+        "price": 1,
+        "priceCurrency": "GBP",
+        "rate": 0.2
+      }
+    ],
+    "acceptedOffer": {
+      "type": "Offer",
+      "id": "https://example.com/events/452#/offers/878",
+      "description": "Winger space for Speedball.",
+      "name": "Speedball winger position",
+      "price": 10,
+      "priceCurrency": "GBP",
+      "validFromBeforeStartDate": "P6D",
+      "latestCancellationBeforeStartDate": "P1D"
+    },
+    "orderedItem": {
+      "type": "ScheduledSession",
+      "id": "https://example.com/events/452/subEvents/132",
+      "startDate": "2018-10-30T11:00:00Z",
+      "superEvent": {
+        "type": "SessionSeries",
+        "id": "https://example.com/events/452",
+        "name": "Speedball",
+        "organizer": {
+          "type": "Organization",
+          "name": "Central Speedball Association",
+          "id": "http://www.speedball-world.com",
+          "url": "http://www.speedball-world.com"
+        },
+        "location": {
+          "type": "Place",
+          "url": "https://www.everyoneactive.com/centres/Middlesbrough-Sports-Village",
+          "name": "Middlesbrough Sports Village",
+          "identifier": "0140",
+          "address": {
+            "type": "PostalAddress",
+            "streetAddress": "Alan Peacock Way",
+            "addressLocality": "Village East",
+            "addressRegion": "Middlesbrough",
+            "postalCode": "TS4 3AE",
+            "addressCountry": "GB"
+          },
+          "geo": {
+            "type": "GeoCoordinates",
+            "latitude": 54.543964,
+            "longitude": -1.20978500000001
+          }
+        }
+      }
+    },
+    "error": [
+      {
+        "type": "OpportunityIsFullError",
+        "description": "There are no spaces remaining in this opportunity"
+      }
+    ]
+  };
 }
 
 
@@ -85,8 +151,18 @@ function leaseOrCheckBookable(orderedItems, draftOrderQuote, checkpointStage, pa
   } : null;
 }
 
+- `getOfferUrlTemplate() => "https://ourparks.org.uk/events/{event_id}#/offers/{offer_id}"`
+- `getOpportunityUrlTemplate() => "https://ourparks.org.uk/events/{event_id}/subEvents/{session_id}"`
+- `getOrderItemUrlTemplate() => "https://ourparks.org.uk/orders/{order_id}/order-items/{order_items}"`
+
 
 //// LIBRARY FUNCTIONS BELOW HERE
+
+function getComponentsFromId(id, template) {
+  // e.g. template = "https://ourparks.org.uk/events/{event_id}#/offers/{offer_id}"
+  //      id = "https://ourparks.org.uk/events/12345#/offers/6789"
+  // return {"event_id": 12345, "offer_id": 6789}
+}
 
 function getTaxArrayFromMap() {
   return Object.values(totalPaymentTaxMap);
@@ -304,7 +380,7 @@ function processCheckpoint (orderQuote, orderQuoteId, authKey) {
   var authKey = getAuthKey();
 
   // Get data for checkpoint (optional optimisation to load the data in one place)
-  var data = fetchCheckpointData(orderId,  authKey, orderQuote.orderedItem );
+  var data = fetchCheckpointData(orderId,  authKey, orderQuote);
 
   // Check that taxMode is set in Seller
   if (!seller.id)
@@ -340,7 +416,10 @@ function processCheckpoint (orderQuote, orderQuoteId, authKey) {
     // Validate input OrderItem
     {
       if (x.acceptedOffer && x.orderedItem) {
-        var fullOrderItem = getOrderItem(x, seller, taxPayeeRelationship, data);
+        var opportunityComponents = getComponentsFromId(x.orderedItem.id, getOpportunityUrlTemplate());
+        var offerComponents = getComponentsFromId(x.acceptedOffer.id, getOfferUrlTemplate());
+
+        var fullOrderItem = getOrderItem(x, opportunityComponents, offerComponents, seller, taxPayeeRelationship, data);
 
         var sellerId = fullOrderItem.organizer.id || fullOrderItem.superEvent.organizer.id || fullOrderItem.facilityUse.organizer.id || fullOrderItem.superEvent.superEvent.organizer.id;
 
@@ -416,10 +495,52 @@ function processCheckpoint (orderQuote, orderQuoteId, authKey) {
 
     // Add orderItem.id, orderItem.accessCode and orderItem.accessToken for successful booking
     // Note this needs to store enough data to contract an Orders feed entry
-    processBooking(draftOrder, checkpointStage, seller.taxMode, taxPayeeRelationship, payer, authKey, data);
+    processBooking(orderId, draftOrder, seller.taxMode, taxPayeeRelationship, payer, authKey, data);
 
     return draftOrder;
   }
+
+  function processBooking(orderId, draftOrder, seller.taxMode, taxPayeeRelationship, payer, authKey, data) {
+    createOrder(draftOrder, seller.taxMode, taxPayeeRelationship, draftOrder.customer, payer, authKey, data);
+
+    try {
+      var orderedItems = draftOrder.orderedItem.Select(x => 
+        // Validate input OrderItem
+        {
+          var opportunityComponents = getComponentsFromId(x.orderedItem.id, getOpportunityUrlTemplate());
+          var offerComponents = getComponentsFromId(x.acceptedOffer.id, getOfferUrlTemplate());
+          
+          var orderItemComponents = bookOrderItem(x, opportunityIdComponents, offerIdComponents, seller.taxMode, taxPayeeRelationship, draftOrder.customer, payer, authKey, data);
+          x.id = getIdFromComponents(orderItemComponents, getOrderItemUrlTemplate());
+          
+          // TODO return x.accessCode from bookOrderItem
+
+          return ;
+        }
+      );
+    } catch (e) {
+      destroyOrder(orderId);
+      return renderError("BookingFailedError")
+    }
+  }
+
+  function createOrder(draftOrder, seller.taxMode, taxPayeeRelationship, draftOrder.customer, payer, authKey, data) {
+    ///(If it doesn't already exist due to a lease)
+    INSERT INTO Orders
+  }
+
+  function bookOrderItem(x, opportunityIdComponents, offerIdComponents, seller.taxMode, taxPayeeRelationship, draftOrder.customer, payer, authKey, data) {
+    INSERT INTO OrderItems
+
+    return {"order_id": lastinsertid}
+  }
+
+  // Must delete all traces of an Order permanently, reversing any changes related to its existence
+  function destroyOrder(orderId) {
+    DELETE FROM Orders WHERE id = orderId;
+    DELETE FROM OrderItems WHERE orderId = orderId;
+  }
+
   
 
   var response = {

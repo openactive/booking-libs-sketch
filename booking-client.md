@@ -93,6 +93,8 @@ GET/DELETE /booking-systems/{system_id}/origin-orders/{order_id}
 - Looks up the Seller to get auth details (errors otherwise)
 - Pass through (background triggers below handle actual work here)
 
+// N.B Every passthrough runs validation on the input and output models
+
 ### C1 - pass through
 //TODO: Do we partition the list by system_id? Or just infer it from the Seller? How do I know which provider a particular opportunity is from?
 
@@ -100,6 +102,7 @@ GET/DELETE /booking-systems/{system_id}/origin-orders/{order_id}
 - Includes "seller" ID in submitted OrderQuote
 - Looks up the Seller to get auth details, based on associated booking system (errors otherwise)
 - Include OrderItem level error if opportunity details OR Seller returned by B do not match with latest feed contents
+
 ### C2 - pass through
 - Includes "seller" ID in submitted OrderQuote
 - Looks up the Seller to get auth details, based on associated booking system (errors otherwise)
@@ -129,10 +132,13 @@ Harvesting occurs in pages. In order for processing to be robust, a page must ac
 
 Harvesting also runs items through validator and stores errors against each
 
+Includes JSON diff library to detect changes, which trigger appropriate notifications: https://www.npmjs.com/package/diff-json
 
 ### Harvest Orders feed
 - Step 1: Write the changes to the DB, which updates the timestamps - just store the whole page. In doing this read the previous content and mark the page as "substantive" if the difference is worth writing home about. If a "substantive" change is already present, add to the array of changes. Only acknowledge new page after all written, otherwise write them again.
 - Step 2: Process each "substantive" page in turn with a single web hook call, cancelling etc as appropriate
+
+- Accept "patch" on existing data structure
 
 - If changes:
   - Trigger Customer Notification Webhook

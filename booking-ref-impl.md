@@ -22,11 +22,11 @@ openActiveEngine = OpenActiveEngine.StubImplementation
 
 ### SessionSeries
 - GET /open-data/session-series?afterModified={modified}&afterId={id}
-  - return openActiveEngine.rpdeOpenDataStub("SessionSeries", modified, id);
+  - return openActiveEngine.rpdeOpenDataPage("SessionSeries", modified, id);
 
 ### ScheduledSession
 - GET /open-data/scheduled-sessions?afterModified={modified}&afterId={id}
-  - return openActiveEngine.rpdeOpenDataStub("ScheduledSessions", modified, id);
+  - return openActiveEngine.rpdeOpenDataPage("ScheduledSessions", modified, id);
 
 ## Open Booking
 
@@ -57,6 +57,12 @@ openActiveEngine = OpenActiveEngine.StubImplementation
 ### Order Status
 - GET /open-booking/orders/{uuid}
   - return openActiveEngine.getOrder(authKey, uuid);
+
+### Lease Cleanup
+- // Note this endpoint should be secured with an API key in production!
+- // This endpoint is designed to be called using a CRON job every 10 minutes (e.g. with wget) or similar
+- GET /open-booking/lease-cleanup?key=58ea215f-47f6-4944-9b81-5ea3d9d0a817
+  - return openActiveEngine.leaseCleanup();
 
 ## Test harness
 This endpoints allows the test harness to reset test data and trigger certain events
